@@ -1,0 +1,1261 @@
+{
+   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+   "contentVersion": "1.0.0.0",
+   "parameters": {
+      "localadminusername": { "type": "securestring" },
+      "localadminpassword": { "type": "securestring" }
+   },
+
+   "variables": {
+
+      "DeployVMs" : true,
+      "DeployVNGConnections": true,
+      "DeployPAN": false,
+      
+      "AzureFirewallName": "AzureFirewall",
+      "AzureFirewallPublicIPAddressName": "AzureFirewallPIP",
+
+      "HubVNETVirtualNetworkGatewayName": "HubNetworkVNG",
+      "HubVNETVNGPublicIPName" : "HubNetworkVNGPublicIP",
+
+      "ExternalVNETVirtualNetworkGatewayName": "ExternalNetworkVNG",
+      "ExternalVNETVNGPublicIPName" : "ExternalNetworkVNGPublicIP",
+
+      "HubToExternalConnectionName": "VNGConnectionHubToExternal",
+      "ExternalToHubConnectionName": "VNGConnectionExternalToHub",
+
+      "VNGSecret": "sekr!t",
+
+      "NetworkSecurityGroupName": "ExternalProtectionNSG",
+
+      "HubVNETName" : "HubVNET",
+      "HubSubnet1Name" : "HubSubnet1",
+      "HubSubnet2Name" : "HubSubnet2",
+      "HubGatewaySubnetName": "GatewaySubnet",
+      "HubFirewallSubnetName": "FirewallSubnet",
+      "HubVNETPeeringToSpoke1VNetName":"Peering-Hub-To-Spoke1",
+      "HubVNETPeeringToSpoke2VNetName":"Peering-Hub-to-Spoke2",
+
+
+      "SpokeVNET1Name": "SpokeVNET1",
+      "SpokeVNET1PeeringToHubVNETName": "Peering-Spoke1-to-Hub",
+
+      "SpokeVNET2Name": "SpokeVNET2",
+      "SpokeVNET2PeeringToHubVNETName": "Peering-Spoke2-to-Hub",
+
+      "ExternalVNETName": "ExternalVNET",
+      "ExternalVNETSubnetName":"externalsubnet1",
+      "ExternalVNETGatewaySubnetName":"GatewaySubnet",
+
+      "SecuresubnetRouteTableName": "SecuresubnetRouteTable",
+      "NonsecuresubnetRouteTableName": "NonSecuresubnetRouteTable",
+
+      "VMSize" : "Standard_B2s",
+      "virtualMachineSKU": "2016-Datacenter",
+
+      "storageAccountName": "yalekentestfwdiagsa",
+
+      "HubVM1Name": "HubVM1",
+      "HubVM1PublicIPAddressName": "[concat(variables('HubVM1Name'),'-PIP')]",
+      "HubVM1NICName" : "[concat(variables('HubVM1Name'),'-NIC')]",
+      
+      "Spoke1SecureVMName": "Spoke1SecureVM",
+      "Spoke1SecureVMPublicIPAddressName": "[concat(variables('Spoke1SecureVMName'),'-PIP')]",
+      "Spoke1SecureVMNICName" : "[concat(variables('Spoke1SecureVMName'),'-NIC')]",
+      
+      "Spoke1NonsecureVMName": "Spoke1NSVM",
+      "Spoke1NonsecureVMPublicIPAddressName": "[concat(variables('Spoke1NonsecureVMName'),'-PIP')]",
+      "Spoke1NonsecureVMNICName" : "[concat(variables('Spoke1NonsecureVMName'),'-NIC')]",
+      
+      "Spoke2SecureVMName": "Spoke2SecureVM",
+      "Spoke2SecureVMPublicIPAddressName": "[concat(variables('Spoke2SecureVMName'),'-PIP')]",
+      "Spoke2SecureVMNICName" : "[concat(variables('Spoke2SecureVMName'),'-NIC')]",
+      
+      "Spoke2NonsecureVMName": "Spoke2NSVM",
+      "Spoke2NonsecureVMPublicIPAddressName": "[concat(variables('Spoke2NonsecureVMName'),'-PIP')]",
+      "Spoke2NonsecureVMNICName" : "[concat(variables('Spoke2NonsecureVMName'),'-NIC')]",
+      
+      "ExternalVMName": "ExternalVM",
+      "ExternalVMPublicIPAddressName": "[concat(variables('ExternalVMName'),'-PIP')]",
+      "ExternalVMNICName" : "[concat(variables('ExternalVMName'),'-NIC')]",
+
+      "FirewallVMName": "PANvm",
+      "FirewallTrafficNICName": "FirewallTrafficNIC",
+      "FirewallManagementNICName" : "FirewallMgmtNIC",
+      "FirewallVMSize": "Standard_D3_v2_Promo",
+      "storageAccountType": "Standard_LRS",
+      "FirewallInstanceDefinition": {
+         "publisher":  "paloaltonetworks",
+         "offer":      "vmseries1",
+         "sku":        "bundle1",
+         "version":    "latest"
+       }
+   },
+
+   "resources": [
+   {
+      "metadata": "Nonsecure Subnet Route Table",
+      "name": "[variables('NonsecuresubnetRouteTableName')]",
+      "type": "Microsoft.Network/routeTables",
+      "apiVersion": "2018-11-01",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "routes": [
+         {
+            "name": "[concat('TrafficTo',variables('SpokeVNET1Name'),'SecureSubnet','NextHopFW')]",
+            "properties": {
+               "addressPrefix": "10.11.4.0/24",
+               "nextHopType": "VirtualAppliance",
+               "nextHopIpAddress": "1.1.1.1"
+            }            
+         },
+         {
+            "name": "[concat('TrafficTo',variables('SpokeVNET2Name'),'SecureSubnet','NextHopFW')]",
+            "properties": {
+               "addressPrefix": "10.11.8.0/24",
+               "nextHopType": "VirtualAppliance",
+               "nextHopIpAddress": "1.1.1.1"
+            }
+         }                
+         ],
+         "disableBgpRoutePropagation": false
+      }
+   },
+   {
+      "name": "[variables('NetworkSecurityGroupName')]",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2018-11-01",
+      "location": "[resourcegroup().location]",
+      "properties": {
+         "securityRules": [
+            {
+               "name": "AllowInboundRDPFromYale",
+               "properties": {
+                  "description": "Allows inbound traffic for port 3389 from Yale Class B networks",
+                  "protocol": "Tcp",
+                  "sourcePortRange": "*",
+                  "destinationPortRange": "3389",
+                  "sourceAddressPrefixes": [ "130.132.0.0/16", "128.36.0.0/16" ],
+                  "destinationAddressPrefix": "*",
+                  "access": "Allow",
+                  "priority": "1010",
+                  "direction": "Inbound"
+               }
+            }
+        ],
+        "defaultSecurityRules": [
+            {
+               "name": "AllowVnetInBound",
+               "properties": {
+                  "description": "Allow inbound traffic from all VMs in VNET",
+                  "protocol": "*",
+                  "sourcePortRange": "*",
+                  "destinationPortRange": "*",
+                  "sourceAddressPrefix": "VirtualNetwork",
+                  "destinationAddressPrefix": "VirtualNetwork",
+                  "access": "Allow",
+                  "priority": 65000,
+                  "direction": "Inbound"
+               }
+            },
+            {
+                "name": "AllowAzureLoadBalancerInBound",
+                "properties": {
+                    "description": "Allow inbound traffic from azure load balancer",
+                    "protocol": "*",
+                    "sourcePortRange": "*",
+                    "destinationPortRange": "*",
+                    "sourceAddressPrefix": "AzureLoadBalancer",
+                    "destinationAddressPrefix": "*",
+                    "access": "Allow",
+                    "priority": 65001,
+                    "direction": "Inbound"
+                }
+            },
+            {
+               "name": "DenyAllInBound",
+               "properties": {
+                  "provisioningState": "Succeeded",
+                  "description": "Deny all inbound traffic",
+                  "protocol": "*",
+                  "sourcePortRange": "*",
+                  "destinationPortRange": "*",
+                  "sourceAddressPrefix": "*",
+                  "destinationAddressPrefix": "*",
+                  "access": "Deny",
+                  "priority": 65500,
+                  "direction": "Inbound"
+               }
+            },
+            {
+               "name": "AllowVnetOutBound",
+               "properties": {
+                  "description": "Allow outbound traffic from all VMs to all VMs in VNET",
+                  "protocol": "*",
+                  "sourcePortRange": "*",
+                  "destinationPortRange": "*",
+                  "sourceAddressPrefix": "VirtualNetwork",
+                  "destinationAddressPrefix": "VirtualNetwork",
+                  "access": "Allow",
+                  "priority": 65000,
+                  "direction": "Outbound"
+                }
+            },
+            {
+               "name": "AllowInternetOutBound",
+               "properties": {
+                  "provisioningState": "Succeeded",
+                  "description": "Allow outbound traffic from all VMs to Internet",
+                  "protocol": "*",
+                  "sourcePortRange": "*",
+                  "destinationPortRange": "*",
+                  "sourceAddressPrefix": "*",
+                  "destinationAddressPrefix": "Internet",
+                  "access": "Allow",
+                  "priority": 65001,
+                  "direction": "Outbound"
+               }
+            },
+            {
+               "name": "DenyAllOutBound",
+               "properties": {
+                  "description": "Deny all outbound traffic",
+                  "protocol": "*",
+                  "sourcePortRange": "*",
+                  "destinationPortRange": "*",
+                  "sourceAddressPrefix": "*",
+                  "destinationAddressPrefix": "*",
+                  "access": "Deny",
+                  "priority": 65500,
+                  "direction": "Outbound"
+               }
+            }        
+         ]
+      }
+   },
+   {
+      "metadata": "Secure subnet Route Table",
+      "name": "[variables('SecuresubnetRouteTableName')]",
+      "type": "Microsoft.Network/routeTables",
+      "apiVersion": "2018-11-01",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "routes": [
+            {
+               "name": "AllTrafficThruFW",
+               "properties": {
+                  "addressPrefix": "0.0.0.0/0",
+                  "nextHopType": "VirtualAppliance",
+                  "nextHopIpAddress": "1.1.1.1"
+               }
+            }
+         ],
+         "disableBgpRoutePropagation": false
+      }
+   },       
+   {
+      "metadata": "External VNET Definition",   
+      "name": "[variables('ExternalVNETName')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2018-11-01",
+      "location": "[resourceGroup().location]",
+      "dependson": [],
+      "properties": {
+            "addressSpace": {
+            "addressPrefixes": [ "192.168.0.0/22" ]
+         },
+         "subnets": [
+            {
+               "name": "[variables('ExternalVNETSubnetName')]",
+              "properties": {
+               "addressPrefix": "192.168.1.0/24"
+               }
+            },
+            {
+               "name": "[variables('ExternalVNETGatewaySubnetName')]",
+               "properties": {
+                  "addressPrefix": "192.168.2.0/24"
+               }
+            }
+         ]         
+      }         
+   },
+   {
+      "metadata":"Hub VNET Definition",   
+      "name": "[variables('HubVNETName')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2018-11-01",
+      "location": "[resourceGroup().location]",
+      "dependson": [
+         "[ResourceId('Microsoft.Network/virtualNetworks/', variables('SpokeVNET1Name'))]",
+         "[ResourceId('Microsoft.Network/virtualNetworks/', variables('SpokeVNET2Name'))]"
+      ],
+      "properties": {
+         "addressSpace": {
+            "addressPrefixes": [
+               "10.11.0.0/22"
+            ]
+         },
+         "subnets": [
+            {
+               "name": "[variables('HubGatewaySubnetName')]",
+               "properties": {
+                  "addressPrefix": "10.11.3.0/24"
+               }
+            },
+            {
+               "name": "[variables('HubFirewallSubnetName')]",
+               "properties": {
+                  "addressPrefix": "10.11.2.0/24"
+               }
+            },
+            {
+               "name": "[variables('HubSubnet1Name')]",
+              "properties": {
+               "addressPrefix": "10.11.0.0/24"
+               }
+            },
+            {
+               "name": "[variables('HubSubnet2Name')]",
+               "properties": {
+                  "addressPrefix": "10.11.1.0/24"
+               }
+            }
+         ],
+         "virtualNetworkPeerings": [
+            {
+               "name": "[variables('HubVNETPeeringToSpoke1VNetName')]",
+               "properties": {
+                  "allowVirtualNetworkAccess": true,
+                  "allowForwardedTraffic": true,
+                  "allowGatewayTransit": false,
+                  "useRemoteGateways": false,
+                  "remoteVirtualNetwork": {
+                     "id": "[resourceId('Microsoft.Network/virtualNetworks',variables('SpokeVNET1Name'))]"
+                  }
+               }
+            },
+            {
+               "name": "[variables('HubVNETPeeringToSpoke2VNetName')]",
+               "properties": {
+                  "allowVirtualNetworkAccess": true,
+                  "allowForwardedTraffic": true,
+                  "allowGatewayTransit": false,
+                  "useRemoteGateways": false,
+                  "remoteVirtualNetwork": {
+                     "id": "[resourceId('Microsoft.Network/virtualNetworks',variables('SpokeVNET2Name'))]"
+                  }
+               }
+            }      
+         ]         
+      }     
+   }, 
+   {
+      "metadata":"Spoke VNET 1 Definition",   
+      "name": "[variables('SpokeVNET1Name')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2018-11-01",
+      "location": "[resourceGroup().location]",
+      "dependson": [
+         "[ResourceId('Microsoft.Network/routeTables',variables('NonsecureSubnetRouteTableName'))]",
+         "[ResourceId('Microsoft.Network/routeTables',variables('SecuresubnetRouteTableName'))]"
+      ],
+      "properties": {
+         "addressSpace": {
+            "addressPrefixes": [ "10.11.4.0/22" ]
+         },
+         "subnets": [
+            {
+               "name": "[concat(variables('SpokeVNET1Name'),'-Secure')]",
+              "properties": {
+               "addressPrefix": "10.11.4.0/24"
+               }
+            },
+            {
+               "name": "[concat(variables('SpokeVNET1Name'),'-Nonsecure')]",
+               "properties": {
+                  "addressPrefix": "10.11.5.0/24"
+               }
+            }
+         ],
+         "virtualNetworkPeerings": [
+            {
+               "name": "[variables('SpokeVNET1PeeringToHubVNETName')]",
+               "id": "string",
+               "properties": {
+                  "allowVirtualNetworkAccess": true,
+                  "allowForwardedTraffic": true,
+                  "allowGatewayTransit": false,
+                  "useRemoteGateways": false,
+                  "remoteVirtualNetwork": {
+                     "id": "[resourceId('Microsoft.Network/virtualNetworks',variables('HubVNETName'))]"
+                  }
+               }
+            }
+         ]         
+      }
+   },
+   {
+      "metadata":"Spoke VNET 2 Definition",         
+      "name": "[variables('SpokeVNET2Name')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2018-11-01",
+      "location": "[resourceGroup().location]",
+      "dependson": [
+         "[ResourceId('Microsoft.Network/routeTables',variables('NonsecureSubnetRouteTableName'))]",
+         "[ResourceId('Microsoft.Network/routeTables',variables('SecuresubnetRouteTableName'))]"
+      ],
+      "properties": {
+            "addressSpace": {
+               "addressPrefixes": [ "10.11.8.0/22" ]
+         },
+         "subnets": [
+            {
+               "name": "[concat(variables('SpokeVNET2Name'),'-Secure')]",
+              "properties": {
+                  "addressPrefix": "10.11.8.0/24"
+               }
+            },
+            {
+               "name": "[concat(variables('SpokeVNET2Name'),'-Nonsecure')]",
+               "properties": {
+                  "addressPrefix": "10.11.9.0/24"
+               }
+            }
+         ],
+         "virtualNetworkPeerings": [
+            {
+               "name": "[variables('SpokeVNET2PeeringToHubVNETName')]",
+               "properties": {
+                  "allowVirtualNetworkAccess": true,
+                  "allowForwardedTraffic": true,
+                  "allowGatewayTransit": false,
+                  "useRemoteGateways": false,
+                  "remoteVirtualNetwork": {
+                     "id": "[resourceId('Microsoft.Network/virtualNetworks',variables('SpokeVNET1Name'))]"
+                  }
+               }
+            }
+         ]   
+      }
+   },  
+   {
+      "metadata": "VNG definition for External VNET",
+      "name": "[variables('ExternalVNETVirtualNetworkGatewayName')]",
+      "type": "Microsoft.Network/virtualNetworkGateways",
+      "apiVersion": "2018-11-01",
+      "location": "[resourcegroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('ExternalVNETName'))]",
+         "[ResourceId('Microsoft.Network/PublicIPAddresses',variables('ExternalVNETVNGPublicIPName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+            {
+               "name": "ipconfig1",
+               "properties": {
+                  "privateIPAllocationMethod": "dynamic",
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets', variables('ExternalVNETName'), variables('ExternalVNETGatewaySubnetName'))]"
+                  },
+                  "publicIPAddress": {
+                     "id": "[ResourceId('Microsoft.Network/PublicIPAddresses',variables('ExternalVNETVNGPublicIPName'))]"
+                  }
+               }
+            }  
+         ],
+         "vpnType": "RouteBased",
+         "gatewayType": "vpn",
+         "sku": {
+            "name": "basic"
+         }
+      }
+   }, 
+   {
+      "metadata": "VNG definition on Hub VNET",
+      "name": "[variables('HubVNETVirtualNetworkGatewayName')]",
+      "type": "Microsoft.Network/virtualNetworkGateways",
+      "apiVersion": "2018-11-01",
+      "location": "[resourcegroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('HubVNETName'))]",
+         "[ResourceId('Microsoft.Network/PublicIPAddresses',variables('HubVNETVNGPublicIPName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+               {
+                  "name": "ipconfig1",
+                  "properties": {
+                     "privateIPAllocationMethod": "dynamic",
+                     "subnet": {
+                        "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets', variables('HubVNETName'), variables('HubGatewaySubnetName'))]"
+                     },
+                     "publicIPAddress": {
+                        "id": "[ResourceId('Microsoft.Network/PublicIPAddresses',variables('HubVNETVNGPublicIPName'))]"
+                     }
+                  }
+               }  
+            ],
+         "vpnType": "RouteBased",
+         "gatewayType": "vpn",
+         "sku": {
+            "name": "basic"
+            }
+      }
+   },
+   {
+      "metadata": "Connection Hub VNET --> External VNET",
+      "name": "[variables('HubToExternalConnectionName')]",
+      "type": "Microsoft.Network/connections",
+      "apiVersion": "2018-11-01",
+      "location": "[resourcegroup().location]",
+      "condition": "[variables('DeployVNGConnections')]",
+      "dependson": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('HubVNETName'))]",
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('ExternalVNETName'))]",
+         "[ResourceId('Microsoft.Network/VirtualNetworkGateways',variables('HubVNETVirtualNetworkGatewayName'))]",
+         "[ResourceId('Microsoft.Network/VirtualNetworkGateways',variables('ExternalVNETVirtualNetworkGatewayName'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses',variables('HubVNETVNGPublicIPName'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses',variables('ExternalVNETVNGPublicIPName'))]"
+      ],
+      "properties": {
+         "authorizationKey": "[variables('VNGSecret')]",
+         "connectionType": "Vnet2Vnet",
+         "virtualNetworkGateway1": {
+            "id": "[ResourceId('Microsoft.Network/VirtualNetworkGateways',variables('HubVNETVirtualNetworkGatewayName'))]"
+         },
+         "virtualNetworkGateway2": {
+            "id": "[ResourceId('Microsoft.Network/VirtualNetworkGateways',variables('ExternalVNETVirtualNetworkGatewayName'))]"
+         }
+      }   
+   },
+   {
+      "metadata": "Connection External VNET --> Hub VNET",
+      "name": "[variables('ExternalToHubConnectionName')]",
+      "type": "Microsoft.Network/connections",
+      "apiVersion": "2018-11-01",
+      "location": "[resourcegroup().location]",
+      "condition": "[variables('DeployVNGConnections')]",
+      "dependson": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('HubVNETName'))]",
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('ExternalVNETName'))]",
+         "[ResourceId('Microsoft.Network/VirtualNetworkGateways',variables('HubVNETVirtualNetworkGatewayName'))]",
+         "[ResourceId('Microsoft.Network/VirtualNetworkGateways',variables('ExternalVNETVirtualNetworkGatewayName'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses',variables('HubVNETVNGPublicIPName'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses',variables('ExternalVNETVNGPublicIPName'))]"
+      ],
+      "properties": {
+         "authorizationKey": "[variables('VNGSecret')]",
+         "connectionType": "Vnet2Vnet",
+         "virtualNetworkGateway1": {
+            "id": "[ResourceId('Microsoft.Network/VirtualNetworkGateways',variables('ExternalVNETVirtualNetworkGatewayName'))]"
+         },
+         "virtualNetworkGateway2": {
+            "id": "[ResourceId('Microsoft.Network/VirtualNetworkGateways',variables('HubVNETVirtualNetworkGatewayName'))]"
+         }
+      }   
+   },
+   {
+      "metadata":"Diagnostics storage account (shared by all VM's)",   
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[variables('storageAccountName')]",
+      "apiVersion": "2018-07-01",
+      "location": "[resourceGroup().location]",
+      "kind": "StorageV2",
+      "sku": { "name": "Standard_LRS" },
+      "properties": {
+         "supportsHttpsTrafficOnly": true
+      }                
+   },
+   {
+      "metadata":"Azure Firewall Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('AzureFirewallPublicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "sku": {
+         "name": "Standard"
+       },
+      "properties": {
+         "publicIPAllocationMethod": "Static"
+      }     
+   },   
+   {
+      "metadata":"External Network VNG Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('ExternalVNETVNGPublicIPName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "publicIPAllocationMethod": "Dynamic"
+      }     
+   },
+   {
+      "metadata":"Hub VNG Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('HubVNETVNGPublicIPName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "publicIPAllocationMethod": "Dynamic"
+      }     
+   },
+   {
+      "metadata":"Hub VM 1 Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('HubVM1PublicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "publicIPAllocationMethod": "Static"
+      }     
+   },
+   {
+      "metadata":"Spoke 1 Secure VM Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('Spoke1SecureVMPublicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "publicIPAllocationMethod": "Static"
+      }     
+   },     
+   {
+      "metadata":"Spoke 1 Nonsecure VM Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('Spoke1NonsecureVMPublicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "publicIPAllocationMethod": "Static"
+      }     
+   },
+   {
+      "metadata":"Spoke 2 Nonsecure VM Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('Spoke2NonsecureVMPublicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "publicIPAllocationMethod": "Static"
+      }     
+   },
+   {
+      "metadata":"Spoke 2 Secure VM Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('Spoke2SecureVMPublicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "publicIPAllocationMethod": "Static"
+      }     
+   },
+   {
+      "metadata":"External VM Public IP Address",   
+      "apiVersion": "2018-11-01",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('ExternalVMPublicIPAddressName')]",
+      "location": "[resourceGroup().location]",
+      "properties": {
+         "publicIPAllocationMethod": "Static"
+      }     
+   },
+   {
+      "metadata":"Firewall Management NIC",   
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('FirewallManagementNICName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+            "[ResourceId('Microsoft.Network/virtualNetworks', variables('HubVNETName'))]"
+      ],
+      "properties": {
+            "ipConfigurations": [
+            {
+               "name": "ipconfig1",
+               "properties": {
+                  "privateIPAllocationMethod": "Static",
+                  "privateIPAddress": "10.11.0.100",
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets',variables('HubVNETName'),variables('HubSubnet1Name'))]"
+                  }
+               }
+            }
+         ]
+      }        
+   },
+   {
+      "metadata":"Firewall Traffic NIC",
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('FirewallTrafficNICName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('HubVNETName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+            {
+               "name": "ipconfig1",
+               "properties": {
+                  "privateIPAllocationMethod": "Static",
+                  "privateIPAddress": "10.11.2.5",
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets', variables('HubVNETName'), variables('HubFirewallSubnetName'))]"
+                  }
+               }
+            }
+         ]
+      }          
+   },
+   {
+      "metadata":"External VM NIC",
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('ExternalVMNICName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('ExternalVNETName'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses/', variables('ExternalVMPublicIPAddressName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+            {
+               "name": "ipconfig1",
+               "properties": {
+                  "privateIPAllocationMethod": "Dynamic",
+                  "publicIPAddress": {
+                     "id": "[ResourceId('Microsoft.Network/publicIPAddresses',variables('ExternalVMPublicIPAddressName'))]"
+                  },
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets', variables('ExternalVNETName'), variables('ExternalVNETSubnetName'))]"
+                  },
+                  "networkSecurityGroup": {
+                     "id" : "[ResourceId('Microsoft.Network/networkSecurityGroups',variables('NetworkSecurityGroupName'))]"
+                  }
+               }
+            }
+         ]
+      }          
+   },
+   {
+      "metadata":"Hub VM 1 NIC",
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('HubVM1NICName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('HubVNETName'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses/', variables('HubVM1PublicIPAddressName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+            {
+               "name": "ipconfig1",
+               "properties": {
+                  "privateIPAllocationMethod": "Dynamic",
+                  "publicIPAddress": {
+                     "id": "[ResourceId('Microsoft.Network/publicIPAddresses',variables('HubVM1PublicIPAddressName'))]"
+                  },
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets', variables('HubVNETName'), variables('HubSubnet1Name'))]"
+                  },
+                  "networkSecurityGroup": {
+                     "id" : "[ResourceId('Microsoft.Network/networkSecurityGroups',variables('NetworkSecurityGroupName'))]"
+                  }
+               }
+            }
+         ]
+      }          
+   },
+   {
+      "metadata":"Spoke 1 Nonsecure VM NIC Definition",
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('Spoke1NonsecureVMNICName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('SpokeVNET1Name'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses/', variables('Spoke1NonsecureVMPublicIPAddressName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+            {
+               "name": "ipconfig1",
+               "properties": {
+                  "privateIPAllocationMethod": "Dynamic",
+                  "publicIPAddress": {
+                     "id": "[ResourceId('Microsoft.Network/publicIPAddresses', variables('Spoke1NonsecureVMPublicIPAddressName'))]"
+                  },
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets', variables('SpokeVNET1Name'), concat(variables('SpokeVNET1Name'),'-Nonsecure'))]"
+                  },
+                  "networkSecurityGroup": {
+                     "id" : "[ResourceId('Microsoft.Network/networkSecurityGroups',variables('NetworkSecurityGroupName'))]"
+                  }
+               }
+            }
+         ]
+      }        
+   },
+   {
+      "metadata":"Spoke 1 Secure VM NIC Definition",
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('Spoke1secureVMNICName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('SpokeVNET1Name'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses/', variables('Spoke1secureVMPublicIPAddressName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+            {
+               "name": "ipconfig1",
+               "properties": {
+                  "privateIPAllocationMethod": "Dynamic",
+                  "publicIPAddress": {
+                     "id": "[ResourceId('Microsoft.Network/publicIPAddresses',variables('Spoke1secureVMPublicIPAddressName'))]"
+                  },
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets', variables('SpokeVNET1Name'), concat(variables('SpokeVNET1Name'),'-Secure'))]"
+                  },
+                  "networkSecurityGroup": {
+                     "id" : "[ResourceId('Microsoft.Network/networkSecurityGroups',variables('NetworkSecurityGroupName'))]"
+                  }
+               }
+            }
+         ]
+      }        
+   },
+   {
+      "metadata":"Spoke 2 Nonsecure VM NIC Definition",
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('Spoke2NonsecureVMNICName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('SpokeVNET2Name'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses/', variables('Spoke2NonsecureVMPublicIPAddressName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+         {
+            "name": "ipconfig1",
+            "properties": {
+                  "privateIPAllocationMethod": "Dynamic",
+                  "publicIPAddress": {
+                     "id": "[ResourceId('Microsoft.Network/publicIPAddresses',variables('Spoke2NonsecureVMPublicIPAddressName'))]"
+                  },
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets',variables('SpokeVNET2Name'), concat(variables('SpokeVNET2Name'),'-Nonsecure'))]"
+                  },
+                  "networkSecurityGroup": {
+                     "id" : "[ResourceId('Microsoft.Network/networkSecurityGroups',variables('NetworkSecurityGroupName'))]"
+                  }
+            }
+         }
+         ]
+      }        
+   },
+   {
+      "metadata":"Spoke 2 Secure VM NIC Definition",
+      "apiVersion": "2016-03-30",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('Spoke2SecureVMNICName')]",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Network/virtualNetworks', variables('SpokeVNET2Name'))]",
+         "[ResourceId('Microsoft.Network/publicIPAddresses/', variables('Spoke2SecureVMPublicIPAddressName'))]"
+      ],
+      "properties": {
+         "ipConfigurations": [
+         {
+            "name": "ipconfig1",
+            "properties": {
+                  "privateIPAllocationMethod": "Dynamic",
+                  "publicIPAddress": {
+                     "id": "[ResourceId('Microsoft.Network/publicIPAddresses',variables('Spoke2SecureVMPublicIPAddressName'))]"
+                  },
+                  "subnet": {
+                     "id": "[ResourceId('Microsoft.Network/virtualNetworks/subnets',variables('SpokeVNET2Name'),concat(variables('SpokeVNET2Name'),'-Secure'))]"
+                  },
+                  "networkSecurityGroup": {
+                     "id" : "[ResourceId('Microsoft.Network/networkSecurityGroups',variables('NetworkSecurityGroupName'))]"
+                  }
+            }
+         }
+         ]
+      }        
+   },
+   {
+      "metadata": "External VM",
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('ExternalVMName')]",
+      "location": "[resourceGroup().location]",
+      "condition": "[variables('DeployVMs')]",
+      "dependsOn": [
+          "[ResourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+          "[ResourceId('Microsoft.Network/networkInterfaces', variables('ExternalVMNICName'))]"
+      ],
+      "properties": {
+          "licenseType": "Windows_Server",
+          "hardwareProfile": {
+              "vmSize": "[variables('VMSize')]"
+          },
+          "osProfile": {
+              "computerName": "[variables('ExternalVMName')]",
+              "adminUsername": "[parameters('localAdminUsername')]",
+              "adminPassword": "[parameters('localAdminPassword')]"
+          },
+          "storageProfile": {
+            "imageReference": {
+                "publisher": "MicrosoftWindowsServer",
+                "offer": "WindowsServer",
+                "sku": "[variables('virtualMachineSKU')]",
+                "version": "latest"
+            },
+            "osDisk": {
+                "name": "[concat(variables('ExternalVMName'),'-osdisk')]",
+                "createOption": "FromImage",
+                "managedDisk": {
+                    "storageAccountType": "Standard_LRS"
+                }
+            },
+            "dataDisks": []
+        },
+          "networkProfile": {
+          "networkInterfaces": [
+              {
+                  "id": "[ResourceId('Microsoft.Network/networkInterfaces',variables('ExternalVMNICName'))]"
+              }
+          ]
+          },
+          "diagnosticsProfile": {
+              "bootDiagnostics": {
+                  "enabled": true,
+                  "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))).primaryEndpoints.blob]"
+              }
+          }
+      }              
+   },
+   {
+      "metadata": "Hub VM",
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('HubVM1Name')]",
+      "location": "[resourceGroup().location]",
+      "condition": "[variables('DeployVMs')]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+         "[ResourceId('Microsoft.Network/networkInterfaces', variables('HubVM1NICName'))]"
+      ],
+      "properties": {
+          "licenseType": "Windows_Server",
+          "hardwareProfile": {
+              "vmSize": "[variables('VMSize')]"
+          },
+          "osProfile": {
+              "computerName": "[variables('HubVM1Name')]",
+              "adminUsername": "[parameters('localAdminUsername')]",
+              "adminPassword": "[parameters('localAdminPassword')]"
+          },
+          "storageProfile": {
+            "imageReference": {
+                "publisher": "MicrosoftWindowsServer",
+                "offer": "WindowsServer",
+                "sku": "[variables('virtualMachineSKU')]",
+                "version": "latest"
+            },
+            "osDisk": {
+                "name": "[concat(variables('HubVM1Name'),'-osdisk')]",
+                "createOption": "FromImage",
+                "managedDisk": {
+                    "storageAccountType": "Standard_LRS"
+                }
+            },
+            "dataDisks": []
+         },
+         "networkProfile": {
+            "networkInterfaces": [
+               {
+                  "id": "[ResourceId('Microsoft.Network/networkInterfaces',variables('HubVM1NICName'))]"
+               }
+            ]
+         },
+         "diagnosticsProfile": {
+            "bootDiagnostics": {
+               "enabled": true,
+               "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))).primaryEndpoints.blob]"
+            }
+         }
+      }              
+   },
+   {
+      "metadata": "Spoke 1 Secure VM",
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('Spoke1SecureVMName')]",
+      "location": "[resourceGroup().location]",
+      "condition": "[variables('DeployVMs')]",
+      "dependsOn": [
+          "[ResourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+          "[ResourceId('Microsoft.Network/networkInterfaces', variables('Spoke1SecureVMNICName'))]"
+      ],
+      "properties": {
+         "licenseType": "Windows_Server",
+         "hardwareProfile": {
+            "vmSize": "[variables('VMSize')]"
+         },
+         "osProfile": {
+            "computerName": "[variables('Spoke1SecureVMName')]",
+            "adminUsername": "[parameters('localAdminUsername')]",
+            "adminPassword": "[parameters('localAdminPassword')]"
+         },
+         "storageProfile": {
+            "imageReference": {
+               "publisher": "MicrosoftWindowsServer",
+               "offer": "WindowsServer",
+               "sku": "[variables('virtualMachineSKU')]",
+               "version": "latest"
+            },
+            "osDisk": {
+               "name": "[concat(variables('Spoke1SecureVMName'),'-osdisk')]",
+               "createOption": "FromImage",
+               "managedDisk": {
+                  "storageAccountType": "Standard_LRS"
+               }
+            },
+            "dataDisks": []
+         },
+         "networkProfile": {
+         "networkInterfaces": [
+               {
+                  "id": "[ResourceId('Microsoft.Network/networkInterfaces',variables('Spoke1SecureVMNICName'))]"
+               }
+            ]
+         },
+         "diagnosticsProfile": {
+            "bootDiagnostics": {
+               "enabled": true,
+               "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))).primaryEndpoints.blob]"
+            }
+         }
+      }        
+   }, 
+   {
+      "metadata": "Spoke 1 Nonsecure VM",
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('Spoke1NonsecureVMName')]",
+      "location": "[resourceGroup().location]",
+      "condition": "[variables('DeployVMs')]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+         "[ResourceId('Microsoft.Network/networkInterfaces', variables('Spoke1NonsecureVMNICName'))]"
+     ],
+      "properties": {
+         "licenseType": "Windows_Server",
+         "hardwareProfile": {
+            "vmSize": "[variables('VMSize')]"
+         },
+         "osProfile": {
+            "computerName": "[variables('Spoke1NonsecureVMName')]",
+            "adminUsername": "[parameters('localAdminUsername')]",
+            "adminPassword": "[parameters('localAdminPassword')]"
+         },
+         "storageProfile": {
+            "imageReference": {
+               "publisher": "MicrosoftWindowsServer",
+               "offer": "WindowsServer",
+               "sku": "[variables('virtualMachineSKU')]",
+               "version": "latest"
+            },
+            "osDisk": {
+               "name": "[concat(variables('Spoke1NonsecureVMName'),'-osdisk')]",
+               "createOption": "FromImage",
+               "managedDisk": {
+                  "storageAccountType": "Standard_LRS"
+               }
+            },
+            "dataDisks": []
+        },
+         "networkProfile": {
+         "networkInterfaces": [
+            {
+               "id": "[ResourceId('Microsoft.Network/networkInterfaces',variables('Spoke1NonsecureVMNICName'))]"
+            }
+         ]
+         },
+         "diagnosticsProfile": {
+            "bootDiagnostics": {
+               "enabled": true,
+               "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))).primaryEndpoints.blob]"
+            }
+         }
+      }              
+   },
+   {
+      "metadata": "Spoke 2 Secure VM",
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('Spoke2SecureVMName')]",
+      "location": "[resourceGroup().location]",
+      "condition": "[variables('DeployVMs')]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+         "[ResourceId('Microsoft.Network/networkInterfaces', variables('Spoke2SecureVMNICName'))]"
+      ],
+      "properties": {
+         "licenseType": "Windows_Server",
+         "hardwareProfile": {
+            "vmSize": "[variables('VMSize')]"
+         },
+         "osProfile": {
+            "computerName": "[variables('Spoke2SecureVMName')]",
+            "adminUsername": "[parameters('localAdminUsername')]",
+            "adminPassword": "[parameters('localAdminPassword')]"
+         },
+         "storageProfile": {
+            "imageReference": {
+               "publisher": "MicrosoftWindowsServer",
+               "offer": "WindowsServer",
+               "sku": "[variables('virtualMachineSKU')]",
+               "version": "latest"
+            },
+            "osDisk": {
+               "name": "[concat(variables('Spoke2SecureVMName'),'-osdisk')]",
+               "createOption": "FromImage",
+               "managedDisk": {
+                  "storageAccountType": "Standard_LRS"
+               }
+            },
+            "dataDisks": []
+        },
+          "networkProfile": {
+          "networkInterfaces": [
+              {
+                  "id": "[ResourceId('Microsoft.Network/networkInterfaces',variables('Spoke2SecureVMNICName'))]"
+              }
+          ]
+          },
+          "diagnosticsProfile": {
+              "bootDiagnostics": {
+                  "enabled": true,
+                  "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))).primaryEndpoints.blob]"
+              }
+          }
+      }              
+   },   
+   {
+      "metadata": "Spoke 2 Nonsecure VM",
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('Spoke2NonsecureVMName')]",
+      "location": "[resourceGroup().location]",
+      "condition": "[variables('DeployVMs')]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+         "[ResourceId('Microsoft.Network/networkInterfaces', variables('Spoke2NonsecureVMNICName'))]"
+     ],
+      "properties": {
+          "licenseType": "Windows_Server",
+          "hardwareProfile": {
+              "vmSize": "[variables('VMSize')]"
+          },
+          "osProfile": {
+              "computerName": "[variables('Spoke2NonsecureVMName')]",
+              "adminUsername": "[parameters('localAdminUsername')]",
+              "adminPassword": "[parameters('localAdminPassword')]"
+          },
+          "storageProfile": {
+            "imageReference": {
+                "publisher": "MicrosoftWindowsServer",
+                "offer": "WindowsServer",
+                "sku": "[variables('virtualMachineSKU')]",
+                "version": "latest"
+            },
+            "osDisk": {
+                "name": "[concat(variables('Spoke2NonsecureVMName'),'-osdisk')]",
+                "createOption": "FromImage",
+                "managedDisk": {
+                    "storageAccountType": "Standard_LRS"
+                }
+            },
+            "dataDisks": []
+        },
+          "networkProfile": {
+          "networkInterfaces": [
+              {
+                  "id": "[ResourceId('Microsoft.Network/networkInterfaces',variables('Spoke2NonsecureVMNICName'))]"
+              }
+          ]
+          },
+          "diagnosticsProfile": {
+              "bootDiagnostics": {
+                  "enabled": true,
+                  "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))).primaryEndpoints.blob]"
+              }
+          }
+      }              
+   },
+   {
+      "metadata": "Virtual PAN Instance",
+      "apiVersion": "2017-03-30",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('FirewallVMName')]",
+      "location": "[resourceGroup().location]",
+      "condition": "[variables('DeployPAN')]",
+      "dependsOn": [
+         "[ResourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+         "[ResourceId('Microsoft.Network/networkInterfaces', variables('FirewallManagementNICName'))]",
+         "[ResourceId('Microsoft.Network/networkInterfaces', variables('FirewallTrafficNICName'))]"
+      ],
+      "plan": {
+         "name" :      "bundle1",
+         "publisher":  "paloaltonetworks",
+         "product":    "vmseries1"
+      },
+      "properties": {
+         "hardwareProfile": {
+            "vmSize": "[variables('FirewallVMSize')]"
+         },
+         "osProfile": {
+            "computerName": "[variables('FirewallVMName')]",
+            "adminUsername": "[parameters('localAdminUsername')]",
+            "adminPassword": "[parameters('localadminpassword')]"
+         },
+         "storageProfile": {
+            "osDisk": {
+              "caching": "ReadWrite",
+              "createOption": "FromImage"
+            }
+         },
+          "networkProfile": {
+            "networkInterfaces": [
+               {
+                  "id": "[ResourceId('Microsoft.Network/networkInterfaces',variables('FirewallManagementNICName'))]",
+                  "properties": {
+                     "primary": true
+                  }
+               },
+               {
+                  "id": "[ResourceId('Microsoft.Network/networkInterfaces',variables('FirewallTrafficNICName'))]",
+                  "properties": {
+                     "primary": false
+                  }
+               }                            
+            ]
+          },
+          "diagnosticsProfile": {
+              "bootDiagnostics": {
+                  "enabled": true,
+                  "storageUri": "[reference(resourceId('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))).primaryEndpoints.blob]"
+              }
+          }
+      }              
+   }
+   ],
+   "outputs": {}
+}
