@@ -1,0 +1,26 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+
+      "FirewallVmInstanceSize": { "value" : "Standard_DS2_v2"},
+
+      "ScaleSetName": { "value": "PAScale" },
+      "instanceCount": { "value": 2 },
+
+      "adminUsername": { "value": "panadmin"},
+      "adminPassword": { "value": "Pa$$w0rd"},
+
+      "loadBalancerFrontEndIPAddress" : { "value": "<IP on LoadBalancerFrontEndsubnet>"},
+
+      "firewallTrafficSubnetID" : { 
+        "value": "/subscriptions/<subscriptionId>/resourceGroups/kjh27TestPADeployment-EastUS-RG/providers/Microsoft.Network/virtualNetworks/<vnetName>/subnets/<FirewallTrafficInterfaceSubnetName>"
+      },
+      "firewallManagementSubnetID" : { 
+        "value": "/subscriptions/<subscriptionId>/resourceGroups/kjh27TestPADeployment-EastUS-RG/providers/Microsoft.Network/virtualNetworks/<vnetName>/subnets/<FirewallManagementInterfaceSubnetName>"
+      },
+      "loadBalancerFrontEndSubnetID" : { 
+        "value": "/subscriptions/<subscriptionId>/resourceGroups/kjh27TestPADeployment-EastUS-RG/providers/Microsoft.Network/virtualNetworks/<vnetName>/subnets/<loadBalancerFrontEndSubnetName>"
+      }
+    }
+  }
