@@ -12,7 +12,7 @@ When we were standing up the Azure environment for my employer, we had a require
 
 1. Firewalls that are placed behind a sufficiently capable load balancer don't have to be "aware" of each other *as long as their configurations match exactly*.
 2. If we used a VM scale set to manage the appliances, we could create a "firewall cluster" that would scale out automatically when under stress and therefore be able to handle significant levels of load.  This would also save cost by not requiring us to run the NVA's on very large VM sizes as a hedge aginst worst-case traffic scenarios.
-3. If we could solve the problem of how to get a NVA which is deployed automatically by the scale set to configure itself and join the load balancer pool unattended, we would have a setup which required no human intervention to scale up (or down) according to load -- and therefore we would have both a HA-like solution and not have to size the VM's used by the NVA's for a worst-case scanario to keep costs reasonable.
+3. If we could solve the problem of how to get a NVA which is deployed automatically by the scale set to configure itself and join the load balancer pool unattended, we would have a setup which required no human intervention to scale up (or down) according to load -- and therefore we would have both a HA-like solution and not have to size the VM's used by the NVA's for a worst-case scenario to keep costs reasonable.
 
 *Disclaimer: I am not a Palo Alto admin.  I relied on a member of our team who was one to handle the PA-specific elements of the environment when we built it.  Please talk to someone who knows PA's better than I do for questions about how some of the PA configuration elements described below were set up.*
 
