@@ -1,6 +1,6 @@
 # Deploying Palo Alto NVA's into Azure for resilience and scalability
 
-This template (and its associated parameter file) are a very simple example of how to create a HA solution for using Palo Alto firewall NVA's in Azure.  
+This ARM template (and its associated parameter file) are a very simple example of how to create a HA solution for using Palo Alto firewall NVA's in Azure.  
 
 This general model should work for other NVA-type appliances that would benefit from being in a HA configuration and autoscaling.
 
@@ -10,9 +10,9 @@ When we were standing uo the Azure environment for my employer, we had a require
 
 ### In our case, I realized a few things:
 
-1. If we used a load balancer and put firewalls behind it then the firewalls didn't have to be "aware" of each other *as long as their configurations match exactly*
-2. If we used a VM scale set to manage the appliances, we could create a "firewall" that would increase its performance automatically when under stress and therefore be able to keep up with even when under significant load
-3. If we could soilve the problem of how to get a NVA which is deployed automatically by the scale set to configure itself and join the load balancer pool unattended, we would have a setup which required no human intervention to scale up (or down) according to load -- and therefore we would have both a HA-like solution and not have to size the VM's used by the NVA's for a worst-case scanario to keep costs reasonable.
+1. Firewalls that are placed behind a sufficiently capable load balancer don't have to be "aware" of each other *as long as their configurations match exactly*.
+2. If we used a VM scale set to manage the appliances, we could create a "firewall cluster" that would scalle out automatically when under stress and therefore be able to handle significant levels of load.  This would also save cost by not requiring us to pick very large VM's to run the NVA's as a worst-case hedge.
+3. If we could solve the problem of how to get a NVA which is deployed automatically by the scale set to configure itself and join the load balancer pool unattended, we would have a setup which required no human intervention to scale up (or down) according to load -- and therefore we would have both a HA-like solution and not have to size the VM's used by the NVA's for a worst-case scanario to keep costs reasonable.
 
 *Disclaimer: I am not a Palo Alto admin.  I relied on a member of our team who was one to handle the PA-specific elements of the environment when we built it.  Please talk to someone who knows PA's better than I do for questions about how some of the PA configuration elements described below were set up.*
 
@@ -36,6 +36,8 @@ If you plan to implement this solution, it's strongly recommended that you deplo
 The configuration of the firewalls should align with the [health probe](https://docs.microsoft.com/en-us/azure/load-balancer/load-balancer-custom-probe-overview) used by the load balancer so that the load balancer doesn't send traffic to a nonresponsive/not-yet-configured NVA.
 
 It's also **very important** that the environment be set up so that when a new NVA is deployed it automatically associates itself with [Panorama](https://www.paloaltonetworks.com/network-security/panorama), otherwise the new NVA's will never be added to the pool by the load balancer.  **This is what makes the load balancer + scale set approach "work" -- the ability to have the scale set deploy a new NVA and for that running-but-unconfigured new node automatically configure itself and join the load balancer pool completely unattended.**  There are a few ways to bootstrap a freshly-deployed Palo Alto NVA but [this one](https://docs.paloaltonetworks.com/vm-series/8-1/vm-series-deployment/bootstrap-the-vm-series-firewall/bootstrap-the-vm-series-firewall-in-azure.html) which uses Azure Files seems to make the most sense.
+
+As a bonus, you can save even more on the "run" cost with these NVA's by purchasing [reserved instances](https://azure.microsoft.com/en-us/pricing/reserved-vm-instances/) of course.
 
 ## The Azure Standard Load Balancer
 
